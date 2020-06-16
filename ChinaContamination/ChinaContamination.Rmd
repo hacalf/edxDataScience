@@ -37,18 +37,14 @@ library(knitr)
 
 ## ## ## ##  Data Stage  ## ## ## ##
 
-#Download the data
+#Download csv file with data
 if (!file.exists("PRSA_Data.csv")){
   download.file("https://github.com/hacalf/edxDataScience/blob/master/ChinaContamination/PRSA_Data.csv", "PRSA_Data.csv")
   }
-
+#Read csv file
+PRSA <- read.csv("PRSA_Data.csv")
+dim(PRSA)
 
 ## Including Plots
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
