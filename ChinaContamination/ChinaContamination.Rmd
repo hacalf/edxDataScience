@@ -1,6 +1,6 @@
 ---
 title: "ChinaContamination"
-author: "JH"
+author: "Jorge Haces"
 date: "16/6/2020"
 output: html_document
 ---
@@ -38,8 +38,8 @@ library(knitr)
 ## ## ## ##  Data Stage  ## ## ## ##
 
 #Download the data
-if (!file.exists("ANAD_Normalized.csv")){
-  download.file("https://data.mendeley.com/datasets/xm232yxf7t/1/files/e535362e-ce98-4729-8c7a-f32fec55cc30/ANAD_Normalized.csv?dl=1", "ANAD_Normalized.csv")
+if (!file.exists("PRSA_Data.csv")){
+  download.file("https://github.com/hacalf/edxDataScience/blob/master/ChinaContamination/PRSA_Data.csv", "PRSA_Data.csv")
   }
 
 
