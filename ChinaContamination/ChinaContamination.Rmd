@@ -1,22 +1,106 @@
 ---
-title: "ChinaContamination"
+title: "China Contamination"
+subtitle: "Data Science: Capstone Proyect"
 author: "Jorge Haces"
 date: "16/6/2020"
-output: html_document
+output: 
+    pdf_document:
+     toc: true
+     toc_depth: 3
+     number_sections: true
+header-includes:
+- \usepackage{float}
+
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'H')
+knitr::opts_chunk$set(fig.align = 'center')
+
+Sys.setlocale("LC_ALL","English")
 ```
+\newpage
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Overview
+This is the final project required for **Data Science: Capstone** course offered by *edX HarvardX for Professional Certificate Program in Data Science*. The theme of this proyect is the Contamination, specifically in China and the aim is to predict the air quality in the fastest growing country nowadays.
 
 
-## ## ## ##  Environment  Settings  ## ## ## ##
+## Introduction
+Contanimation is defined as the presence of materials in the air that cause serious harm or discomfort to people. The contamination has increased since the Industrial Revolution began, in the second half of the 18th century, with production processes in factories, the development of transportation and the use of fuels.
+ 
+According to the World Health Organization (WHO), the state of the current atmosphere causes, by the simple act of breathing, the death of around seven million people a year (fine particle respiration).
+
+The most common air pollutant gases are carbon monoxide, sulfur dioxide, chlorofluorocarbons, and nitrogen oxides.
+Photochemicals such as ozone and smog are increased in the air by nitrogen oxides and hydrocarbons reacting with sunlight.
+
+Contaminants are classified into:
+
+• Primaries are those that are emitted directly into the atmosphere such as sulfur dioxide, carbon monoxide
+
+• Secondary are those that are formed by atmospheric chemical processes that act on primary contaminants such as sulfuric acid, which is formed by the oxidation of sulfur dioxide, nitrogen dioxide that is formed by oxidizing the primary pollutant nitric oxide and ozone that is formed from oxygen.
+[[1](https://es.wikipedia.org/wiki/Contaminaci%C3%B3n_atmosf%C3%A9rica)]
+
+
+## Project Description
+
+An analysis of the data will be carried out based on the following models:  k Nearest Neighbors, Logistic Regression, Support Vector Machines (SVM), Random Forests and Neural Network to help us predict if pollution will grow even more (2.3% in 2018 almost at double compared to 2010). To answer the question, will china be able to comply with the Paris agreement signed in 2015? Whose goal is to reduce the global temperature to 2°C in 2050.
+
+For this we will divide the data into two: training data and test data. Later, we will train the different models in the first set and then will be evaluated in the second set.
+Finally, we will use the **Root-Mean-Square-Error (RMSE)** and the **“overall accuracy”** to rate the performance of each model and thus identify the best for this project.
+
+
+## DataSet 
+The Dataset used in this project is *Beijing Multi-Site Air-Quality Data Data Set*, available at the UCI Machine Learning Repository [[2](https://archive.ics.uci.edu/ml/datasets/Beijing+Multi-Site+Air-Quality+Data)].
+
+This data set includes hourly air pollutants data from 12 nationally-controlled air-quality monitoring sites. The air-quality data are from the Beijing Municipal Environmental Monitoring Center. The meteorological data in each air-quality site are matched with the nearest weather station from the China Meteorological Administration. The time period is from March 1st, 2013 to February 28th, 2017. Missing data are denoted as NA.
+
+
+The Attribute Information is the following:
+
+* No: row number
+* year: year of data in this row
+* month: month of data in this row
+* day: day of data in this row
+* hour: hour of data in this row
+* PM2.5: PM2.5 concentration (ug/m^3)
+* PM10: PM10 concentration (ug/m^3)
+* SO2: SO2 concentration (ug/m^3)
+* NO2: NO2 concentration (ug/m^3)
+* CO: CO concentration (ug/m^3)
+* O3: O3 concentration (ug/m^3)
+* TEMP: temperature (degree Celsius)
+* PRES: pressure (hPa)
+* DEWP: dew point temperature (degree Celsius)
+* RAIN: precipitation (mm)
+* wd: wind direction
+* WSPM: wind speed (m/s)
+* station: name of the air-quality monitoring site
+
+The data is contained in a Zip file named *PRSA2017_Data_20130301-20170228.zip* containing 12 files (
+one for each municipality), as follow:
+
+* PRSA_Data_Aotizhongxin_20130301-20170228.csv
+* PRSA_Data_Changping_20130301-20170228.csv
+* PRSA_Data_Dingling_20130301-20170228.csv
+* PRSA_Data_Dongsi_20130301-20170228.csv
+* PRSA_Data_Guanyuan_20130301-20170228.csv
+* PRSA_Data_Gucheng_20130301-20170228.csv
+* PRSA_Data_Huairou_20130301-20170228.csv
+* PRSA_Data_Nongzhanguan_20130301-20170228.csv
+* PRSA_Data_Shunyi_20130301-20170228.csv
+* PRSA_Data_Tiantan_20130301-20170228.csv
+* PRSA_Data_Wanliu_20130301-20170228.csv
+* PRSA_Data_Wanshouxigong_20130301-20170228.csv
+
+# Methods and Analysis
+
+
+## Data Stage 
+
+
+```{r Environment  Settings, message=FALSE, warning=FALSE, echo=FALSE, results="hide"}
+
+#### Environment  Settings
 
 # Packages required for this proyect
 pkgs <-c("tidyverse",   "caret","kernlab",  "randomForest","knitr")
@@ -34,17 +118,20 @@ library(tidyverse)
 library(kernlab)
 library(randomForest)
 library(knitr)
+```
 
-## ## ## ##  Data Stage  ## ## ## ##
 
+
+```{r DataLoad, message=FALSE, warning=FALSE, echo=FALSE, error=FALSE}
 #Download csv file with data
 if (!file.exists("PRSA_Data.csv")){
-  download.file("https://github.com/hacalf/edxDataScience/blob/master/ChinaContamination/PRSA_Data.csv", "PRSA_Data.csv")
+  download.file("https://raw.github.com/hacalf/edxDataScience/master/ChinaContamination/PRSA_Data.csv", "PRSA_Data.csv")
   }
 #Read csv file
 PRSA <- read.csv("PRSA_Data.csv")
-dim(PRSA)
+### Exploratory Data Analysis
+str(PRSA)
+```
 
-## Including Plots
 
 
