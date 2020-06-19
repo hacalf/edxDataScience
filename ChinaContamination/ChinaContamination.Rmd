@@ -48,7 +48,7 @@ An analysis of the data will be carried out based on the following models:  k Ne
 For this we will divide the data into two: training data and test data. Later, we will train the different models in the first set and then will be evaluated in the second set.
 Finally, we will use the **Root-Mean-Square-Error (RMSE)** and the **“overall accuracy”** to rate the performance of each model and thus identify the best for this project.
 
-
+\newpage
 ## DataSet 
 The Dataset used in this project is *Beijing Multi-Site Air-Quality Data Data Set*, available at the UCI Machine Learning Repository [[2](https://archive.ics.uci.edu/ml/datasets/Beijing+Multi-Site+Air-Quality+Data)].
 
@@ -92,11 +92,13 @@ one for each municipality), as follow:
 * PRSA_Data_Wanliu_20130301-20170228.csv
 * PRSA_Data_Wanshouxigong_20130301-20170228.csv
 
-# Methods and Analysis
+\newpage
 
+# Methods and Analysis
 
 ## Data Stage 
 
+Next, the UCI data will be downloaded in ZIP format to decompress them and load the 12 files in a single variable called PRSA, identifying the data to be analyzed with 420,768 records and 18 attributes (columns).
 
 ```{r Environment  Settings, message=FALSE, warning=FALSE, echo=FALSE, results="hide"}
 
@@ -119,19 +121,106 @@ library(kernlab)
 library(randomForest)
 library(knitr)
 ```
-
-
-
 ```{r DataLoad, message=FALSE, warning=FALSE, echo=FALSE, error=FALSE}
-#Download csv file with data
-if (!file.exists("PRSA_Data.csv")){
-  download.file("https://raw.github.com/hacalf/edxDataScience/master/ChinaContamination/PRSA_Data.csv", "PRSA_Data.csv")
-  }
-#Read csv file
-PRSA <- read.csv("PRSA_Data.csv")
-### Exploratory Data Analysis
+
+#Download ZIP file with data
+if (!file.exists("PRSA2017_Data_20130301-20170228.zip")){
+  download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/00501/PRSA2017_Data_20130301-20170228.zip", "PRSA2017_Data_20130301-20170228.zip")
+}
+# Unzip the data file
+if (!file.exists("Data")){
+zip_file<- ".\\PRSA2017_Data_20130301-20170228.zip"
+outDir<-"Data"
+unzip(zip_file,exdir=outDir)
+}
+#Read the 12 csv files into a variable
+PRSA <- list.files(path = ".\\Data\\PRSA_Data_20130301-20170228",pattern = "*.csv", full.names = TRUE) %>% lapply(read_csv) %>% bind_rows                                                        
+ 
+# Dimensions of the original data (rows,columns) 
+dim(PRSA)
+```
+
+Subsequently, we execute the nearZeroVar function to identify the attributes that have no significant variation in our data set; In this case, the attribute "Rain" does not present significant variations, so we remove that attribute. 
+
+```{r DataStage_PRSA, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Structure of the data (data type, numbers of rows, number of attributes)
 str(PRSA)
+
+#Near zero variance ( identify the attributes that do not give us valuable data )
+nzv <- nearZeroVar(PRSA)
+
+#Remove the nzv columns and save in another variable
+data <- PRSA[,-nzv]
+
+```
+
+Therefore, we will continue with 17 attributes.
+
+```{r DataStage_Ftype, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Dimensions of the valuable data (rows,columns) 
+dim(data)
+```
+It was identified that the attribute "No" is a consecutive attribute and not contribute anything to the data, therefore it will also be discarded. It is identified that all the attributes are numerical type with the exception of “station” which is character type, therefore, the attributes will be transformed to factor type to make the data set more efficient.
+
+```{r DataStage_Ftype2, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Show the data in a transposed version to see more data
+glimpse(data)
+
+#Remove the "no" variable because is a consecutive (also do not give us valuable data)
+data <- data[,-c(1)]
+
+# Cast the attributes year, month, day, hour, wd and station from "dbl" type to "factor" type
+data$year <- as.factor(data$year) 
+data$month <- as.factor(data$month) 
+data$day <- as.factor(data$day) 
+data$hour <- as.factor(data$hour) 
+data$wd <- as.factor(data$wd) 
+data$station <- as.factor(data$station) 
+
+```
+
+Similarly, it is validated that the PM (2.5 and 10) attributes; in this case, only the attribute “CO” will be transformed to an integer.
+
+```{r DataStage_Itype, message=FALSE, warning=FALSE, echo=FALSE, error=FALSE}
+# Analyse if the the attributes PM (2.5 and 10) and CO can be cast to Integer
+unique(data$PM2.5)
+unique(data$PM10)
+unique(data$CO)
+
+# Only the attribute CO can be casted to integer
+data$CO <- as.integer(data$CO) 
+
+```
+```{r DataStage_ItypeCO, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Review the first 6 rows
+head(data)
+
+```
+
+We visualize the data set with the changes made
+
+```{r DataStage_Review, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Review the previous changes in a transposed version to see more data
+glimpse(data)
+
 ```
 
 
+Finally, we run the display of the attribute statistics. It is important to note that the mean and  median values, in every attribute, are not very far from each other, therefore, there are not many scattered data.
+
+```{r DataStage_Summary, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Review the statistics of each attribute
+summary(data)
+
+```
+
+We can verify in the following histogram in this case with the attribute CO
+
+```{r DataStage_histogram, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Histogram of Carbon Monoxide
+data %>%
+  ggplot(aes(CO)) + geom_histogram() +
+  labs(title = "China Contamination", x = "Carbon Monoxide")
+
+```
 
