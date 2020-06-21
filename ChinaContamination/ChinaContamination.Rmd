@@ -46,7 +46,7 @@ Contaminants are classified into:
 An analysis of the data will be carried out based on the following models:  k Nearest Neighbors, Logistic Regression, Support Vector Machines (SVM), Random Forests and Neural Network to help us predict if pollution will grow even more (2.3% in 2018 almost at double compared to 2010). To answer the question, will china be able to comply with the Paris agreement signed in 2015? Whose goal is to reduce the global temperature to 2°C in 2050.
 
 For this we will divide the data into two: training data and test data. Later, we will train the different models in the first set and then will be evaluated in the second set.
-Finally, we will use the **Root-Mean-Square-Error (RMSE)** and the **“overall accuracy”** to rate the performance of each model and thus identify the best for this project.
+Finally, we will use the **Root-Mean-Square-Error (RMSE)**  to rate the performance of each model and thus identify the best for this project.
 
 \newpage
 ## DataSet 
@@ -105,7 +105,7 @@ Next, the UCI data will be downloaded in ZIP format to decompress them and load 
 #### Environment  Settings
 
 # Packages required for this proyect
-pkgs <-c("tidyverse",   "caret","kernlab",  "randomForest","knitr")
+pkgs <-c("tidyverse",   "caret","kernlab", "caTools","ranger",  "randomForest","knitr")
 
 # If a package is missing it will added in the missing packages list
 missing_pkgs <-pkgs[!(pkgs %in% installed.packages())]
@@ -118,6 +118,8 @@ if (length(missing_pkgs)) {
 library(caret)
 library(tidyverse)
 library(kernlab)
+library(caTools)
+library(ranger)
 library(randomForest)
 library(knitr)
 ```
@@ -149,12 +151,12 @@ str(PRSA)
 #Near zero variance ( identify the attributes that do not give us valuable data )
 nzv <- nearZeroVar(PRSA)
 
-#Remove the nzv columns and save in another variable
+#Remove the nzv columns, NA data and save in another variable
 data <- PRSA[,-nzv]
-
+data<- na.omit(data)
 ```
 
-Therefore, we will continue with 17 attributes.
+Therefore, we will continue with 17 attributes and 382,172 rows.
 
 ```{r DataStage_Ftype, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
 # Dimensions of the valuable data (rows,columns) 
@@ -172,16 +174,16 @@ data <- data[,-c(1)]
 # Cast the attributes year, month, day, hour, wd and station from "dbl" type to "factor" type
 data$year <- as.factor(data$year) 
 data$month <- as.factor(data$month) 
-data$day <- as.factor(data$day) 
-data$hour <- as.factor(data$hour) 
+data$day <- as.integer(data$day) 
+data$hour <- as.integer(data$hour) 
 data$wd <- as.factor(data$wd) 
 data$station <- as.factor(data$station) 
-
 ```
 
 Similarly, it is validated that the PM (2.5 and 10) attributes; in this case, only the attribute “CO” will be transformed to an integer.
 
 ```{r DataStage_Itype, message=FALSE, warning=FALSE, echo=FALSE, error=FALSE}
+
 # Analyse if the the attributes PM (2.5 and 10) and CO can be cast to Integer
 unique(data$PM2.5)
 unique(data$PM10)
@@ -190,6 +192,15 @@ unique(data$CO)
 # Only the attribute CO can be casted to integer
 data$CO <- as.integer(data$CO) 
 
+# Finaly add the attribute date in a single column
+data <- data %>% mutate(date = ISOdate(year, month, day,hour))
+
+# Filtered for performance reasons: half days and only 3 rows per day
+data <-data %>% filter(day %%2==0,hour %%6==0) %>% select(date,CO,PM2.5,PM10,SO2,NO2,O3,TEMP,PRES,DEWP,wd,WSPM,station)
+
+#And convert de tibble to data.frame
+data<-as.data.frame(data)
+
 ```
 ```{r DataStage_ItypeCO, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
 # Review the first 6 rows
@@ -197,7 +208,7 @@ head(data)
 
 ```
 
-We visualize the data set with the changes made
+We visualize the data set with the changes made ( Filtered for performance reasons: half days and only 3 rows per day)
 
 ```{r DataStage_Review, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
 # Review the previous changes in a transposed version to see more data
@@ -218,9 +229,463 @@ We can verify in the following histogram in this case with the attribute CO
 
 ```{r DataStage_histogram, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
 # Histogram of Carbon Monoxide
-data %>%
-  ggplot(aes(CO)) + geom_histogram() +
-  labs(title = "China Contamination", x = "Carbon Monoxide")
+data %>% ggplot(aes(CO)) + geom_histogram() +
+         labs(title = "China Contamination", x = "Carbon Monoxide")
 
 ```
 
+## Exploratory Data Analisys
+To better understand the dataset i will perform a Exploratory Data Analysis (EDA) which will facilitate the generation of the models later.
+
+
+### Data Throught Time
+First, the amount of pollutants over time is analyzed (2013-2017).
+The amount of carbon monoxide is shown in the following graph.
+
+```{r EDA_CO_Y, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Carbon Monoxide
+data_grph <- data %>%
+  select(date,CO) %>%
+  gather(key = "Indexes", value = "value", -date)
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Carbon Monoxide", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+Below is the Particulate Matter and Ozone.
+```{r EDA_PM_Y, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Particulate Matter and Ozono
+data_grph <- data %>%
+  select(date,PM10,PM2.5,O3) %>%
+  gather(key = "Indexes", value = "value", -date)
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Particulate Matter and Ozone.", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+Finally, Nitric Dioxide and Sulfur Dioxide is shown.
+```{r EDA_SONO_Y, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Nitrogen Dioxide and Sulfur Dioxide
+data_grph <- data %>%
+  select(date, NO2, SO2) %>%
+  gather(key = "Indexes", value = "value", -date)
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Nitric Dioxide and Sulfur Dioxide", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+It is observed in the past graphs that the concentration levels tend to increase throughout the years, but during some months (different for each contaminant) will be maximus and  minimous
+
+
+### Data Throught Temperature
+Then, the amount of pollutants over temperature is analyzed (-20°C to 40 °C).
+The amount of carbon monoxide is shown in the following graph.
+
+```{r EDA_CO_T, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Carbon Monoxide
+data_grph <- data %>%
+  select(TEMP,CO) %>%
+  gather(key = "Indexes", value = "value", -TEMP)
+
+data_grph %>%
+  ggplot(aes(x=TEMP,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Carbon Monoxide", x = "Temperature (°C)",
+       y = "concentration (ug/mˆ3)")
+```
+Below is the Particulate Matter and Ozone.
+```{r EDA_PM_T, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Particulate Matter and Ozono
+data_grph <- data %>%
+  select(TEMP,PM10,PM2.5,O3) %>%
+  gather(key = "Indexes", value = "value", -TEMP)
+
+data_grph %>%
+  ggplot(aes(x=TEMP,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Particulate Matter and Ozone.", x = "Temperature (°C)",
+       y = "concentration (ug/mˆ3)")
+```
+Finally, Nitric Dioxide and Sulfur Dioxide is shown.
+```{r EDA_SONO_T, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Nitrogen Dioxide and Sulfur Dioxide
+data_grph <- data %>%
+  select(TEMP, NO2, SO2) %>%
+  gather(key = "Indexes", value = "value", -TEMP)
+
+data_grph %>%
+  ggplot(aes(x=TEMP,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Nitric Dioxide and Sulfur Dioxide", x = "Temperature (°C)",
+       y = "concentration (ug/mˆ3)")
+```
+It is observed in the past graphs that the concentration levels tend to increase for the Particulate Matter over 0°C and also increase  for Ozono over 35°C.
+
+
+### Data Throught Pressure
+Then, the amount of pollutants over pressure is analyzed (982 hPa to 1042 hPa).
+The amount of carbon monoxide is shown in the following graph.
+
+```{r EDA_CO_P, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Carbon Monoxide
+data_grph <- data %>%
+  select(PRES,CO) %>%
+  gather(key = "Indexes", value = "value", -PRES)
+
+data_grph %>%
+  ggplot(aes(x=PRES,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Carbon Monoxide", x = "Pressure (hPa)",
+       y = "concentration (ug/mˆ3)")
+```
+Below is the Particulate Matter and Ozone.
+```{r EDA_PM_P, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Particulate Matter and Ozono
+data_grph <- data %>%
+  select(PRES,PM10,PM2.5,O3) %>%
+  gather(key = "Indexes", value = "value", -PRES)
+
+data_grph %>%
+  ggplot(aes(x=PRES,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Particulate Matter and Ozone.", x = "Pressure (hPa)",
+       y = "concentration (ug/mˆ3)")
+```
+Finally, Nitric Dioxide and Sulfur Dioxide is shown.
+```{r EDA_SONO_P, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Nitrogen Dioxide and Sulfur Dioxide
+data_grph <- data %>%
+  select(PRES, NO2, SO2) %>%
+  gather(key = "Indexes", value = "value", -PRES)
+
+data_grph %>%
+  ggplot(aes(x=PRES,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Nitric Dioxide and Sulfur Dioxide", x = "Pressure (hPa)",
+       y = "concentration (ug/mˆ3)")
+```
+It is observed in the past graphs that the concentration levels tend to increase between 1000 and 1020 hPa. In other pressures a low concentration is registered.
+
+
+### Data Throught Wind Speed
+Finally, the amount of pollutants over wind speed is analyzed ( 0 m/s to 13.2 m/s).
+The amount of carbon monoxide is shown in the following graph.
+
+```{r EDA_CO_WS, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Carbon Monoxide
+data_grph <- data %>%
+  select(WSPM,CO) %>%
+  gather(key = "Indexes", value = "value", -WSPM)
+
+data_grph %>%
+  ggplot(aes(x=WSPM,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Carbon Monoxide", x = "Wind Speed (m/s)",
+       y = "concentration (ug/mˆ3)")
+```
+Below is the Particulate Matter and Ozone.
+```{r EDA_PM_WS, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Particulate Matter and Ozono
+data_grph <- data %>%
+  select(WSPM,PM10,PM2.5,O3) %>%
+  gather(key = "Indexes", value = "value", -WSPM)
+
+data_grph %>%
+  ggplot(aes(x=WSPM,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Particulate Matter and Ozone.", x = "Wind Speed (m/s)",
+       y = "concentration (ug/mˆ3)")
+```
+Finally, Nitric Dioxide and Sulfur Dioxide is shown.
+```{r EDA_SONO_WS, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Nitrogen Dioxide and Sulfur Dioxide
+data_grph <- data %>%
+  select(WSPM, NO2, SO2) %>%
+  gather(key = "Indexes", value = "value", -WSPM)
+
+data_grph %>%
+  ggplot(aes(x=WSPM,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  labs(title = "Nitric Dioxide and Sulfur Dioxide", x = "Wind Speed (m/s)",
+       y = "concentration (ug/mˆ3)")
+```
+It is observed in the past graphs that the concentration levels tend to decrease when the Wind Speed increase. Since the wind carries the pollutants out the area, drastically reducing the presence of these.
+
+
+### Data Throught Station
+Then, the amount of pollutants over station is analyzed ( 12 different).
+The amount of carbon monoxide is shown in the following graph.
+
+```{r EDA_CO_S, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Carbon Monoxide
+data_grph <- data %>%
+  select(date,station,CO) %>%
+  gather(key = "Indexes", value = "value", "CO")
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) + 
+  facet_wrap(~ station) +
+  labs(title = "Carbon Monoxide", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+Below is the Particulate Matter and Ozone.
+```{r EDA_PM_S, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Particulate Matter and Ozono
+data_grph <- data %>%
+  select(date,station,PM10,PM2.5,O3) %>%
+  gather(key = "Indexes", value = "value", "PM10":"O3")
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) +  
+  facet_wrap(~ station) +
+  labs(title = "Particulate Matter and Ozone.", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+Finally, Nitric Dioxide and Sulfur Dioxide is shown.
+```{r EDA_SONO_S, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+# Nitrogen Dioxide and Sulfur Dioxide
+data_grph <- data %>%
+  select(date,station, NO2, SO2) %>%
+  gather(key = "Indexes", value = "value", "NO2":"SO2")
+
+data_grph %>%
+  ggplot(aes(x=date,y=value)) +
+  geom_point(aes(color = Indexes)) +  
+  facet_wrap(~ station) +
+  labs(title = "Nitric Dioxide and Sulfur Dioxide", x = "Year",
+       y = "concentration (ug/mˆ3)")
+```
+It is observed in the past graphs that the concentration levels tend to increase throughout the years, but during some months (different for each contaminant) will be maximus and  minimous. And the most important thing is that the pollution of each station presents very similar values to each other in the same period of time.
+
+So, based on the above, it will be modeled based on Carbon Monoxide (CO) because it presents higher concentration averages on the dataset.
+
+## Models
+
+For the purpose of analise the data in every model, the data set is partitioned in two sets: training and
+test in a proportion of 90:10. We train the model using the first data set (training), then
+test it using the second set (test) and then calculate the RMSE. 
+
+Train Set Dimension
+```{r DataSets, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+set.seed(2000, sample.kind="Rounding")
+test_prt <- createDataPartition(data$CO, times = 1, p = 0.1, list = FALSE)
+train_dts <- data[-test_prt,]
+test_dts <- data[test_prt,]
+dim(train_dts)
+```
+Test Set Dimension
+```{r DataSetsT, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+dim(test_dts)
+real_CO <- test_dts$CO
+```
+
+Once the data to be analyzed and the method to be used have been identified; we must evaluate the performance of the method and we will do it in this case with the Root Mean Square Error (RMSE) which is a precision measure, used to compare prediction errors of different models for a particular data set, and among more the closer the value is to zero, the more accurate the method will be. The RMSE formula is as follows:
+$$ {RMSE}=\sqrt{\frac{\sum\limits_{i=1}^{n} (x_{t} - x_{p})^{2}} {n}}$$
+
+Where:
+
+${RMSE}$ is the Root Mean Square Error
+
+$\sum\limits_{i=1}^{n}$ is the sum of the quadratic difference
+
+$x_{t}$ is the real data
+
+$x_{p}$ is the predicted data
+
+```{r RMSE, message=FALSE, warning=FALSE, echo=TRUE, error=FALSE}
+RMSE <- function(real_data, predicted_data){
+                  sqrt(mean((real_data - predicted_data)^2))
+                  }
+
+```
+
+### Simple Average
+
+In order to enhance the processing times, the first the model is this project is "Simple Average", which is described with the following formula:
+$$\hat{X}=\frac{\sum_{i=1}^{n}X_{i}} {n} $$
+Where: 
+
+$\hat{X}$ is the average rating of all observations
+
+$\sum_{i=1}^{n}$ is the summation of data
+
+$X_{i}$ is the rating given by a user to a movie at a certain time
+
+${n}$ is the number of observations
+
+We start with calculating the average, we obtain:
+
+```{r, echo=T}
+# Calculation of the average from the training set
+avg <-mean(train_dts$CO)
+avg
+```
+
+Now calculating the RMSE, we obtain: 
+
+```{r, echo=T}
+# Calculation of the RMSE with the previous avg and validation set
+rmse_avg <- RMSE(real_CO, avg)
+
+```
+
+So we save the RMSE: 1142.09
+```{r, echo=T}
+options(pillar.sigfig = 6)
+models_result <- tibble(Model = "Simple Average", RMSE = rmse_avg)
+models_result
+```
+
+### k Nearest Neighbours (kNN)
+k Nearest Neighbours (kNN) model is a supervised classification method (Learning, estimation based on a training set and prototypes). This is a non-parametric classification method, which estimates the value of the probability density function or directly the posterior probability that an element *x* belongs to class **C** from the information provided by the prototype set.
+
+Then the following plot show us the different k values tested
+```{r, echo=T}
+#### identifying the best "k" 
+
+set.seed(2000, sample.kind="Rounding")
+knn_k <- train(CO ~ date,
+                   method = "knn",
+                   tuneGrid = data.frame(k = seq(1, 11, 2)),
+                   data = train_dts)
+
+## Plot the K's calculated
+ggplot(knn_k, highlight = TRUE)
+```
+
+So the best "k" is:
+```{r, echo=T}
+##Getting the best "k": 
+best_k<-knn_k$bestTune
+best_k
+```
+
+So, we begin training the first set
+```{r, echo=T}
+#### Training the model
+train_knn <- train(CO ~ date,
+                      method = "knn",
+                      tuneGrid = data.frame(k = best_k),
+                      data = train_dts)
+```
+
+Calculating the prediction
+```{r, echo=T}
+## Getting the prediction
+pred_knn <- predict(train_knn, test_dts)
+```
+Now calculating the RMSE, we obtain: 537.208
+
+```{r, echo=T}
+# Calculation of the RMSE with the predicted and test set
+rmse_knn <- RMSE(real_CO, pred_knn)
+
+```
+
+So we save the result.
+```{r, echo=T}
+models_result <- bind_rows(models_result,
+                           tibble(Model = "K-Nearest Neighbors", RMSE = rmse_knn))
+models_result
+```
+
+### Random Forest
+The Random Forest Model  is a combination of predictor trees such that each tree depends on the values of an independently tested random vector and with the same distribution for each of these.
+
+So, we begin training the first set
+```{r, echo=T}
+#### Training the model
+set.seed(2000, sample.kind="Rounding")
+train_rnd <- ranger(CO ~ date,
+                  data = train_dts,
+                  num.trees = 400,
+                  respect.unordered.factors = "order",
+                  seed = 2000)
+print(train_rnd)
+```
+
+Calculating the prediction
+```{r, echo=T}
+## Getting the prediction
+pred_rnd <- predict(train_rnd, test_dts)$predictions
+```
+Now calculating the RMSE, we obtain: 537.420
+
+```{r, echo=T}
+# Calculation of the RMSE with the predicted and test set
+rmse_rnd <- RMSE(real_CO, pred_rnd)
+
+```
+
+
+So we save the result.
+```{r, echo=T}
+models_result <- bind_rows(models_result,
+                           tibble(Model = "Random Forest", RMSE = rmse_rnd))
+models_result
+```
+
+
+### Neural Network
+The Neural Netwok model consists of a set of units, called artificial neurons, connected together to transmit signals. The input information traverses the neural network (where it undergoes various operations) producing output values.
+
+Each neuron is connected to others through links. In these links, the output value of the previous neuron is multiplied by a weight value. These link weights can increase or inhibit the activation state of adjacent neurons. Similarly, at the exit of the neuron, there may be a limiting function or threshold, which modifies the result value or imposes a limit that must not be exceeded before spreading to another neuron. This function is known as an activation function.
+
+So, we begin training the first set
+```{r, echo=T}
+#### Training the model
+train_nnt <- train(CO ~ date,
+                   method = "nnet",
+                   data = train_dts)
+```
+
+Calculating the prediction
+```{r, echo=T}
+## Getting the prediction
+pred_nnt <- predict(train_nnt, test_dts)
+```
+Now calculating the RMSE, we obtain: 1663.79
+
+```{r, echo=T}
+# Calculation of the RMSE with the predicted and test set
+rmse_nnt <- RMSE(real_CO, pred_nnt)
+
+```
+
+
+So we save the result.
+```{r, echo=T}
+models_result <- bind_rows(models_result,
+                           tibble(Model = "Neural Network", RMSE = rmse_nnt))
+models_result
+```
+
+# Results
+
+For this project 4 models have been tested to predict the air pollution in china considering the CO as the attribute to evaluate. The RMSE was the measure to evaluate the perfomance and viability for every model. For different models the RMSE is enlisted in the following table:
+```{r, echo=T}
+models_result
+```
+
+# Conclusions
+The model **K-Nearest Neighbors** works best with data . The datatest has given us an RMSE of  **537.208**, which is the lowest among the models examined. 
+
+The Simple Model gave us a fairly high RMSE for this data set (1142.09) which is explained by its simplicity.
+
+The K-Nearest Neighbors Model gave us a lowest RMSE (537.208), due to the closeness of the data.
+
+The Random Forest Model gave a lower RMSE (537.420) so it is a good option to analyze the data.
+
+The Neural Network Model gave us the worst RMSE (1663.79) due to the type of data that was managed in this project.
+
+It is therefore concluded that the model **K-Nearest Neighbors** is the appropriate for predicting or recognizing CO pollution given the required data.
+
+Finally, based on the analyzed data, the growth trends of the contamination are high, so it will take longer to meet the defined goals.
